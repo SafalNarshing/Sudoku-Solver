@@ -1,4 +1,4 @@
-from dlx_node import ColumnNode, count_column
+from .dlx_node import ColumnNode, count_column
 
 
 class DLXSolver:

@@ -1,6 +1,6 @@
-from exact_cover_matrix import build_exact_cover_matrix, get_forced_rows, decode_row_index
-from dlx_node import build_dlx_grid
-from dlx_solver import DLXSolver
+from .exact_cover_matrix import build_exact_cover_matrix, get_forced_rows, decode_row_index
+from .dlx_node import build_dlx_grid
+from .dlx_solver import DLXSolver
 
 
 def solve_sudoku(board):

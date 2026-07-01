@@ -2,11 +2,14 @@ from copy import deepcopy
 import time
 from .heuristicSolver2 import solve_with_performance_tracking
 from .recursiveBacktracking import solve_backtracking
+from .integration import solve_sudoku as solve_dlx
+
 def solve_with_comparison(board):
     """Compare both solving methods on identical boards"""
     # Create deep copies of the board for each solver
     board_heuristic = deepcopy(board)
     board_backtrack = deepcopy(board)
+    board_dlx = deepcopy(board)
     
     # Run heuristic solver (returns a dict with keys like 'solved' and 'solution')
     start_time = time.time()
@@ -21,11 +24,16 @@ def solve_with_comparison(board):
     start_time = time.time()
     backtrack_success = solve_backtracking(board_backtrack)
     backtrack_time = (time.time() - start_time) * 1000
-    
-    # Use the heuristic solution if both were successful
-    final_solution = board_heuristic
-    if heuristic_success and backtrack_success:
-        # prefer explicit solution returned by heuristic solver when present
-        final_solution = heuristic_solution
 
-    return (heuristic_success and backtrack_success), final_solution, heuristic_time, backtrack_time
+    #-- DLX Solver --
+    start_time  = time.time()
+    dlx_result  = solve_dlx(board_dlx)       # returns solved board or None
+    dlx_time    = (time.time() - start_time) * 1000
+    dlx_success = dlx_result is not None
+    
+    # Final solution — prefer heuristic, fall back to DLX result
+    final_solution = heuristic_solution if heuristic_success else (dlx_result if dlx_success else board_backtrack)
+
+    overall_success = heuristic_success and backtrack_success and dlx_success
+
+    return overall_success, final_solution, heuristic_time, backtrack_time, dlx_time  # ← now returns 5 values

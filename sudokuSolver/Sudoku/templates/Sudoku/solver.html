@@ -483,7 +483,7 @@
     .then(data => {
         if (data.solved) {
             console.log("Sudoku solved successfully:", data.solution);
-            updateGrid(data.solution, data.heuristic_time, data.backtrack_time);
+            updateGrid(data.solution, data.heuristic_time, data.backtrack_time, data.dlx_time);
         } else {
             dialogueDiv.innerHTML = `
                 <p>Error: ${data.error}</p>
@@ -505,7 +505,7 @@
 }
         
     // Modify the updateGrid function to include timing display
-    function updateGrid(solution, heuristicTime, backtrackTime) {
+    function updateGrid(solution, heuristicTime, backtrackTime, dlxTime) {
     const cells = document.querySelectorAll('.sudoku-grid .cell');
     for (let row = 0; row < 9; row++) {
         for (let col = 0; col < 9; col++) {
@@ -526,30 +526,37 @@
       // Update the dialog div to show timing results
       // Update the dialog div with the new styled timing results
       const dialogueDiv = document.querySelector('.dialouge .rectangle');
-    dialogueDiv.innerHTML = `
-        <div class="result-times">
-            <h3 class="result-header">Solution Analysis</h3>
-            <div class="timing-grid">
-                <div class="timing-item">
-                    <div class="algorithm-name">Heuristic</div>
-                    <div>
-                        <span class="time-value">${heuristicTime}</span>
-                        <span class="time-unit">ms</span>
-                    </div>
-                </div>
-                <div class="timing-item">
-                    <div class="algorithm-name">Backtrack</div>
-                    <div>
-                        <span class="time-value">${backtrackTime}</span>
-                        <span class="time-unit">ms</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="smallrectangle">
-            <p id="solve">Unsolve</p>
-        </div>
-    `;
+      dialogueDiv.innerHTML = `
+          <div class="result-times">
+              <h3 class="result-header">Solution Analysis</h3>
+              <div class="timing-grid">
+                  <div class="timing-item">
+                      <div class="algorithm-name">Heuristic</div>
+                      <div>
+                          <span class="time-value">${heuristicTime}</span>
+                          <span class="time-unit">ms</span>
+                      </div>
+                  </div>
+                  <div class="timing-item">
+                      <div class="algorithm-name">Backtrack</div>
+                      <div>
+                          <span class="time-value">${backtrackTime}</span>
+                          <span class="time-unit">ms</span>
+                      </div>
+                  </div>
+                  <div class="timing-item">
+                      <div class="algorithm-name">DLX</div>
+                      <div>
+                          <span class="time-value">${dlxTime}</span>
+                          <span class="time-unit">ms</span>
+                      </div>
+                  </div>
+              </div>
+          </div>
+          <div class="smallrectangle">
+              <p id="solve">Unsolve</p>
+          </div>
+      `;
 
 
     // Update mobile solve button
@@ -575,10 +582,18 @@
                         <span class="mobile-time-unit">ms</span>
                     </div>
                 </div>
+                <div class="mobile-timing-item">
+                    <div class="mobile-algorithm-name">DLX</div>
+                    <div>
+                        <span class="mobile-time-value">${dlxTime}</span>
+                        <span class="mobile-time-unit">ms</span>
+                    </div>
+                </div>
             </div>
         </div>
         
     `;
+    
     
     // Update solve button event listener for mobile
     const solveMobileButton = document.getElementById('Solve');
