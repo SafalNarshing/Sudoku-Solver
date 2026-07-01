@@ -1,18 +1,15 @@
 {
-    "builds": [
-        {
-            "src": "sudokuSolver/wsgi.py",
-            "use": "@vercel/python",
-            "config": {
-                "maxLambdaSize": "15mb",
-                "runtime": "python3.9",
-                "buildcommand": "bash setup.sh"
-            }
-        }],
-    "routes": [
-        {
-            "src": "/(.*)",
-            "dest": "sudokuSolver/wsgi.py"
-        }
-    ]
+  "version": 2,
+  "builds": [
+    {
+      "src": "sudokuSolver/wsgi.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "sudokuSolver/wsgi.py"
+    }
+  ]
 }
