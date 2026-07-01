@@ -4,21 +4,19 @@ from dlx_solver import DLXSolver
 
 
 def solve_sudoku(board):
-    """
-    Solve a Sudoku puzzle using DLX (Algorithm X with Dancing Links).
-    :param board: 2D list representing the Sudoku grid (0 for empty cells).
-    :return: Solved Sudoku grid as a 2D list, or None if no solution exists.
-    """
-    # Step 1: Build the exact cover matrix
+    # Step 1: Build exact cover matrix
     matrix = build_exact_cover_matrix()
     forced_rows = get_forced_rows(board)
 
-    # Step 2: Build the Dancing Links structure
+    # Step 2: Build Dancing Links structure
     root, column_nodes = build_dlx_grid(matrix)
 
-    # Step 3: Pre-cover rows for pre-filled cells
+    # Step 3: Create solver FIRST
+    solver = DLXSolver(root)
+
+    # Step 4: Pre-cover forced rows (given digits)
     for row_idx in forced_rows:
-        # Find the first node in the row corresponding to row_idx
+        # Find the node for this row_idx in any column
         row_node = None
         for col in column_nodes:
             node = col.down
@@ -31,26 +29,26 @@ def solve_sudoku(board):
                 break
 
         if not row_node:
-            raise ValueError(f"Row index {row_idx} not found in the Dancing Links structure.")
+            raise ValueError(f"Row index {row_idx} not found in DLX structure.")
 
-        # Cover all columns satisfied by this row
+        # Cover this row's column first, then all columns to the right
+        solver.cover(row_node.column)
         right_node = row_node.right
         while right_node != row_node:
             solver.cover(right_node.column)
             right_node = right_node.right
 
-    # Step 4: Solve the exact cover problem
-    solver = DLXSolver(root)
+        # Add to solution so decode works correctly
+        solver.solution.append(row_node)
+
+    # Step 5: Search
     if solver.search():
-        # Step 5: Decode the solution into a Sudoku grid
-        solution = solver.solution
-        solved_board = [[0 for _ in range(9)] for _ in range(9)]
-        for row_node in solution:
-            i, j, v = decode_row_index(row_node.row_idx)
-            solved_board[i][j] = v + 1  # Convert 0-based index to 1-based digit
+        solved_board = [[0] * 9 for _ in range(9)]
+        for node in solver.solution:
+            i, j, v = decode_row_index(node.row_idx)
+            solved_board[i][j] = v + 1
         return solved_board
 
-    # No solution exists
     return None
 
 

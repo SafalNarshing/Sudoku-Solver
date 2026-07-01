@@ -64,7 +64,7 @@ class DLXSolver:
         """
         column = self.root.right
         min_size = float('inf')
-        chosen_column = None
+        chosen_column = column
 
         while column != self.root:
             if column.size < min_size:

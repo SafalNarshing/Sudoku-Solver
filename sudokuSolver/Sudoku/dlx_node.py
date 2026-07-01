@@ -25,15 +25,15 @@ class Node:
         up   / down   — neighbours in the same matrix column
         column        — the ColumnNode that heads this column
     """
-
-    __slots__ = ("left", "right", "up", "down", "column")
+    __slots__ = ("left", "right", "up", "down", "column", "row_idx")
 
     def __init__(self):
         self.left   = self
         self.right  = self
         self.up     = self
         self.down   = self
-        self.column: "ColumnNode" = None   # set when inserted into a column
+        self.column = None
+        self.row_idx = -1   # set during build_dlx_grid # set when inserted into a column
 
     # ------------------------------------------------------------------
     # Linking helpers
@@ -162,6 +162,7 @@ def build_dlx_grid(matrix, col_names=None):
                 continue
 
             node        = Node()
+            node.row_idx = r
             node.column = columns[c]
 
             # Vertical link: insert at bottom of column
