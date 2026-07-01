@@ -248,14 +248,15 @@ def solve_sudoku(request):
                         board[row][col] = int(value)
             
             # Solve using both methods and compare
-            success, solution, heuristic_time, backtrack_time = solve_with_comparison(board)
+            success, solution, heuristic_time, backtrack_time, dlx_time = solve_with_comparison(board)
             
             if success:
                 return JsonResponse({
                     'solved': True,
                     'solution': solution,
                     'heuristic_time': round(heuristic_time, 2),
-                    'backtrack_time': round(backtrack_time, 2)
+                    'backtrack_time': round(backtrack_time, 2),
+                    'dlx_time': round(dlx_time, 2)  # Include DLX time in the response
                 })
             else:
                 return JsonResponse({
