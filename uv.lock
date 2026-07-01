@@ -1,0 +1,20 @@
+version = 1
+revision = 3
+requires-python = ">=3.11"
+
+[[package]]
+name = "pythonpy"
+version = "0.4.11"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/01/ca/3b2c0fe88b4305dcaa2c575046781338add06e5670e3baf13a378e3acbd4/pythonpy-0.4.11.tar.gz", hash = "sha256:2a8eeace21bb6d1cff3822f612fc5c33cbaaad0933dce84955e594a0bf1ec81a", size = 8267, upload-time = "2016-03-28T06:17:26.087Z" }
+
+[[package]]
+name = "sudoku-solver"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "pythonpy" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pythonpy", specifier = ">=0.4.11" }]
