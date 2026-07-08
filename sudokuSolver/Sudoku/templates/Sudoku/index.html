@@ -106,7 +106,7 @@
         </div>
     </a>
     </a>
-    <a href="{%url 'solver'%}" style="text-decoration: none; color: inherit;">
+    <a href="#" onclick="navigateToSolve(); return false;" style="text-decoration: none; color: inherit;">
     <div class="s">
         Solve
     </div>
@@ -395,32 +395,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 function navigateToPlay() {
-    // Check if user is authenticated by looking for the userProfile element
     const userProfile = document.getElementById('userProfile');
     
     if (userProfile) {
-        // User is authenticated, check game state
-        fetch('/check-game-state/', {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.game_in_progress) {
-                window.location.href = "/play/";
-            } else {
-                window.location.href = "/level/";
-            }
-        })
-        .catch(error => {
-            console.error('Error checking game state:', error);
-            window.location.href = "/level/";
-        });
+        sessionStorage.setItem('selectedFlow', 'play');
+        window.location.href = "/size/";
     } else {
-        // User is not authenticated, redirect to login
+        window.location.href = "/login/";
+    }
+}
+
+function navigateToSolve() {
+    const userProfile = document.getElementById('userProfile');
+
+    if (userProfile) {
+        sessionStorage.setItem('selectedFlow', 'solve');
+        window.location.href = "/size/";
+    } else {
         window.location.href = "/login/";
     }
 }

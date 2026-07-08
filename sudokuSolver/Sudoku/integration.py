@@ -1,18 +1,21 @@
 from .exact_cover_matrix import build_exact_cover_matrix, get_forced_rows, decode_row_index
 from .dlx_node import build_dlx_grid
 from .dlx_solver import DLXSolver
+from .sudoku_utils import empty_board
 
 
-def solve_sudoku(board):
+def solve_sudoku(board, n=None, progress=None):
+    n = n or len(board)
+
     # Step 1: Build exact cover matrix
-    matrix = build_exact_cover_matrix()
-    forced_rows = get_forced_rows(board)
+    matrix = build_exact_cover_matrix(n)
+    forced_rows = get_forced_rows(board, n)
 
     # Step 2: Build Dancing Links structure
     root, column_nodes = build_dlx_grid(matrix)
 
     # Step 3: Create solver FIRST
-    solver = DLXSolver(root)
+    solver = DLXSolver(root, progress=progress)
 
     # Step 4: Pre-cover forced rows (given digits)
     for row_idx in forced_rows:
@@ -41,15 +44,23 @@ def solve_sudoku(board):
         # Add to solution so decode works correctly
         solver.solution.append(row_node)
 
-    # Step 5: Search
-    if solver.search():
-        solved_board = [[0] * 9 for _ in range(9)]
-        for node in solver.solution:
-            i, j, v = decode_row_index(node.row_idx)
-            solved_board[i][j] = v + 1
-        return solved_board
+    # The forced (given) rows above were appended directly, bypassing
+    # record_progress — record one snapshot now so the series' starting
+    # point reflects the puzzle's givens before the search begins.
+    solver.record_progress(force=True)
 
-    return None
+    # Step 5: Search
+    try:
+        if solver.search():
+            solved_board = empty_board(n)
+            for node in solver.solution:
+                i, j, v = decode_row_index(node.row_idx, n)
+                solved_board[i][j] = v + 1
+            return solved_board
+
+        return None
+    finally:
+        solver.finalize_progress()
 
 
 def print_sudoku(board):

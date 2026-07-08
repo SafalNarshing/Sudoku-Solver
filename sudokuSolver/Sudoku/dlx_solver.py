@@ -1,13 +1,30 @@
 from .dlx_node import ColumnNode, count_column
+from .sudoku_utils import ProgressRecorder
 
 
 class DLXSolver:
-    def __init__(self, root: ColumnNode):
+    def __init__(self, root: ColumnNode, progress: list = None):
         """
         Initialize the DLX solver with the root header node of the Dancing Links structure.
+
+        If `progress` is a list, it is populated with (elapsed_ms,
+        cells_filled) snapshots as rows are added to/removed from the
+        solution — each row corresponds to placing one digit in one cell,
+        so len(self.solution) doubles as the cells-filled count.
         """
         self.root = root
         self.solution = []  # Stores the solution rows
+        self._progress = progress
+        self._recorder = ProgressRecorder() if progress is not None else None
+
+    def record_progress(self, force=False):
+        if self._recorder:
+            self._recorder.record(len(self.solution), force=force)
+
+    def finalize_progress(self):
+        if self._recorder:
+            self.record_progress(force=True)
+            self._progress.extend(self._recorder.points)
 
     def search(self, k=0):
         """
@@ -30,6 +47,7 @@ class DLXSolver:
         while row != column:
             # Add the row to the solution
             self.solution.append(row)
+            self.record_progress()
 
             # Cover all columns satisfied by this row
             right_node = row.right
@@ -49,6 +67,7 @@ class DLXSolver:
 
             # Remove the row from the solution
             self.solution.pop()
+            self.record_progress()
 
             # Move to the next row
             row = row.down

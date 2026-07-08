@@ -33,7 +33,7 @@
                 </a>
                 </div>
             </div>
-            <div class="Play" id="playbutton" onclick="navigateToLevel()">  
+            <div class="Play" id="playbutton" onclick="navigateToSizePlay()">  
                 <img src="{% static 'Sudoku/images/joy.svg' %}" alt="" srcset="">  
                 <p>Play</p>  
             </div>  
@@ -43,12 +43,14 @@
                 <p>Solver</p>  
             </div>  
             <script>  
-                function navigateToLevel() {  
-                    window.location.href = "{% url 'level' %}";  
+                function navigateToSizePlay() {  
+                    sessionStorage.setItem('selectedFlow', 'play');
+                    window.location.href = "{% url 'size' %}";  
                 }  
             
                 function navigateToSolver() {  
-                    window.location.href = "{% url 'solver' %}";  
+                    sessionStorage.setItem('selectedFlow', 'solve');
+                    window.location.href = "{% url 'size' %}";  
                 }  
             </script>
             </div>
@@ -66,9 +68,9 @@
         <p id="beginner-text">BEGINNER</p>
   </div>
 
-  <p class="difficulty">Choose a difficulty</p>
-  
-  
+  <p class="difficulty-title">Choose a difficulty</p>
+
+
   <div class="rectangle2">
     <p id="easy-text">EASY</p>
 </div>
@@ -80,7 +82,7 @@
 <div class="rectangle4">
     <p id="hard-text">HARD</p>
 </div>
-    
+
 <div class="rectangle5">
     <p id="extreme-text">EXTREME</p>
 </div>
@@ -160,44 +162,14 @@ function getCookie(name) {
         }
 
 
-        // Modify the selectDifficulty function in level.html
-        function selectDifficulty(difficulty) {
-            fetch('/save-game-state/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCookie('csrftoken')
-        },
-        body: JSON.stringify({
-            gameBoard: null,
-            solutionBoard: null,
-            score: 0,
-            time: 0,
-            difficulty: difficulty,
-            is_game_in_progress: false
-        })
-    })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    window.location.href = /play/; 
-                } else {
-                    console.error("Error setting difficulty:", data.error);
-                }
-            })
-            .catch(error => console.error("Fetch error:", error));
-        }
-        
-        
+        // Grid size is selected on the dedicated size page.
+        const CLUE_TABLES = {
+            9: { beginner: 50, easy: 40, medium: 35, hard: 27, extreme: 20 },
+            16: { beginner: 160, easy: 125, medium: 110, hard: 85, extreme: 65 }
+        };
+        let selectedGridSize = parseInt(sessionStorage.getItem('sudokuGridSize') || '9', 10);
+
         document.addEventListener("DOMContentLoaded", function () {
-            const difficulties = {
-                beginner: 50,
-                easy: 40,
-                medium: 35,
-                hard: 27,
-                extreme: 20
-            };
-        
             document.querySelectorAll(".rectangle1, .rectangle2, .rectangle3, .rectangle4, .rectangle5").forEach(element => {
                 element.addEventListener("click", function () {
                     const difficultyText = element.querySelector('p').id;
@@ -205,21 +177,19 @@ function getCookie(name) {
 
                      // Hardcoded URL
                     const playUrl = "/play/";
-                    //set difficulty
-                    selectDifficulty(difficulty);
+                    const clues = CLUE_TABLES[selectedGridSize][difficulty];
 
-                    const clues = difficulties[difficulty];
-                    
-                    console.log(`Generating puzzle with ${clues} clues for ${difficulty} difficulty`);
-                    
+                    console.log(`Generating ${selectedGridSize}x${selectedGridSize} puzzle with ${clues} clues for ${difficulty} difficulty`);
+
                     fetch('/sudoku/generate/', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                             'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
                         },
-                        body: JSON.stringify({ 
-                            clues: clues
+                        body: JSON.stringify({
+                            clues: clues,
+                            size: selectedGridSize
                         })
                     })
                     .then(response => response.json())
@@ -234,6 +204,7 @@ function getCookie(name) {
                         // Store both puzzle and solution
                         sessionStorage.setItem('sudokuPuzzle', JSON.stringify(data.puzzle));
                         sessionStorage.setItem('solutionBoard', JSON.stringify(data.solutionBoard));
+                        sessionStorage.setItem('currentLevel', difficulty);
                         
                         // Redirect to play page
                         window.location.href = playUrl;

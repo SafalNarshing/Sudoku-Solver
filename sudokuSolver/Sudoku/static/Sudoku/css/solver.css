@@ -129,8 +129,6 @@ nav {
 .sudoku-grid {
   position: absolute;
   display: grid;
-  grid-template-columns: repeat(9, 1fr);
-  grid-template-rows: repeat(9, 1fr);
   gap: 1px;
   background-color: #888686;
   padding: 2px;
@@ -155,6 +153,11 @@ nav {
   transition: all 0.1s;
 }
 
+.cell,
+.buttons [class^="rectangle"] {
+  box-sizing: border-box;
+}
+
 /* Cell Styles */
 .cell:focus {
   outline: none;
@@ -169,37 +172,47 @@ nav {
   background-color: #fdd194;
 }
 
-/* 3x3 Box Borders */
-.cell:nth-child(3n) {
-  border-right: 2px solid #888686;
-}
-
-.cell:nth-child(n+19):nth-child(-n+27),
-.cell:nth-child(n+46):nth-child(-n+54) {
-  border-bottom: 2px solid #888686;
-}
-
-
-      
-      .buttons {
+.buttons {
           position: fixed;
-          bottom: -9vh;
+      bottom: 2.5vh;
           left: 50%;
           transform: translateX(-50%);
           display: flex;
+          flex-wrap: wrap;
           justify-content: center;
           align-items: center;
           gap: clamp(10px, 1vw, 20px);
-          width: min(90%, 600px);
+          width: min(95%, 760px);
           height: auto;
+      z-index: 20;
       }
       
-      .rectangle1, .rectangle2, .rectangle3, 
-      .rectangle4, .rectangle5, .rectangle6, 
-      .rectangle7, .rectangle8, .rectangle9 {
+.buttons [class^="rectangle"] .number-label {
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          margin: 0;
+          font-size: clamp(1.2rem, 3vw, 2rem);
+          color: #333;
+          text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+      }
+
+.number-counter {
+  position: absolute;
+  bottom: 1px;
+  right: 2px;
+  font-size: 0.55rem;
+  color: #666;
+  margin: 0;
+}
+
+.buttons [class^="rectangle"] {
           all: unset; /* Clear all styles for uniformity */
           position: relative;
-          width: clamp(30px, 4vw, 50px);
+          width: clamp(28px, 3.5vw, 46px);
           aspect-ratio: 1 / 1.5;
           border: 2px solid #888686;
           box-shadow: 5px 5px 10px rgba(0, 0, 0, 0.2), 
@@ -210,11 +223,12 @@ nav {
           cursor: pointer;
           margin: 0;
           padding: 0;
+          display: flex;
+          justify-content: center;
+          align-items: center;
       }
       
-      .rectangle1:hover, .rectangle2:hover, .rectangle3:hover, 
-      .rectangle4:hover, .rectangle5:hover, .rectangle6:hover, 
-      .rectangle7:hover, .rectangle8:hover, .rectangle9:hover {
+.buttons [class^="rectangle"]:hover {
           transform: translateY(-5px);
           box-shadow: 7px 7px 15px rgba(0, 0, 0, 0.3), 
                       -7px -7px 15px rgba(255, 255, 255, 0.7);
@@ -237,10 +251,9 @@ text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
 
 .side-panel {
   position: fixed;
-  /* transform: translateY(-50%); */
-  width: 50%;
-  top: 0%;
-  left: 110%;
+  width: clamp(280px, 22%, 380px);
+  top: 10%;
+  left: calc(50% + clamp(150px, 21%, 300px) + 3rem);
   display:flex;
   flex-direction: column;
   gap: 2em;
@@ -360,12 +373,14 @@ text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
      transition: border-radius 0.6s ease; 
  }
  .clear_mobile{
+  display: none;
   position: relative;
   left:-100px;
   align-items: center;
   border-radius: 20%;
  }
 .solve_mobile{
+  display: none;
   position: fixed;
   left:-100px;
 }
@@ -626,6 +641,12 @@ text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
   color: #888;
   font-size: 0.8rem;
   margin-left: 2px;
+}
+
+.mobile-time-note {
+  color: #b45309;
+  font-size: 0.7rem;
+  margin-top: 2px;
 }
 
 /* Animation for expanding the solve button container */
@@ -979,6 +1000,12 @@ text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
   margin-left: 2px;
 }
 
+.time-note {
+  color: #b45309;
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+
 /* Responsive adjustments */
 @media (max-width: 480px) {
 
@@ -986,4 +1013,217 @@ text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
   .side-panel{
     display: none;
   }
+}
+
+/* View Graph button (4th slot in the Solution Analysis grid) */
+.timing-item-graph,
+.mobile-timing-item-graph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.view-graph-btn {
+  all: unset;
+  cursor: pointer;
+  color: #fff;
+  background: #F9AC30;
+  font-family: 'Caveat Brush', serif;
+  font-size: 1.1rem;
+  text-align: center;
+  padding: 0.6rem 1rem;
+  border-radius: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.view-graph-btn:hover {
+  background: #e89a1f;
+  transform: translateY(-2px);
+}
+
+/* Solve-time comparison modal */
+.graph-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 2000;
+  align-items: center;
+  justify-content: center;
+}
+
+.graph-modal.open {
+  display: flex;
+}
+
+.graph-modal-content {
+  position: relative;
+  background: #fff;
+  border-radius: 16px;
+  padding: 1.8rem 2rem 1.4rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  width: min(90%, 420px);
+}
+
+.graph-modal-close {
+  all: unset;
+  position: absolute;
+  top: 0.8rem;
+  right: 1rem;
+  cursor: pointer;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: #888;
+}
+
+.graph-modal-close:hover {
+  color: #F9AC30;
+}
+
+.graph-modal-title {
+  color: #333;
+  font-size: 1.3rem;
+  text-align: center;
+  margin: 0 0 0.2rem;
+}
+
+.graph-modal-subtitle {
+  color: #888;
+  font-size: 0.8rem;
+  text-align: center;
+  margin: 0 0 1.4rem;
+}
+
+.timing-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.2rem;
+  padding-top: 0.5rem;
+}
+
+.timing-chart-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.timing-chart-value {
+  color: #333;
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 0.4rem;
+  white-space: nowrap;
+}
+
+.timing-chart-track {
+  width: 100%;
+  max-width: 48px;
+  height: 180px;
+  display: flex;
+  align-items: flex-end;
+  background-color: #f5f5f5;
+  background-image: linear-gradient(#e5e5e5, #e5e5e5);
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+  background-position: 0 25%, 0 50%, 0 75%;
+  box-shadow:
+    inset 0 25% 0 -1px #e5e5e5,
+    inset 0 50% 0 -1px #e5e5e5,
+    inset 0 75% 0 -1px #e5e5e5;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.timing-chart-bar {
+  width: 100%;
+  height: 0%;
+  background: linear-gradient(180deg, #ffcc80, #F9AC30);
+  border-radius: 4px 4px 0 0;
+  transition: height 0.8s ease-out;
+}
+
+.timing-chart-label {
+  color: #666;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+/* Bar/Line view toggle inside the graph modal */
+.chart-view-toggle {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.chart-view-option {
+  all: unset;
+  cursor: pointer;
+  color: #666;
+  background: #f5f5f5;
+  font-family: 'Caveat Brush', serif;
+  font-size: 1rem;
+  padding: 0.35rem 1.1rem;
+  border-radius: 999px;
+  transition: all 0.2s ease;
+}
+
+.chart-view-option.selected {
+  background: #F9AC30;
+  color: #fff;
+}
+
+.chart-view-option:hover:not(.selected) {
+  background: #ececec;
+}
+
+/* Progress line chart (cells filled vs. elapsed time, log scale) */
+.progress-svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.progress-gridline {
+  stroke: #e5e5e5;
+  stroke-width: 1;
+}
+
+.progress-axis-label {
+  fill: #999;
+  font-size: 9px;
+  font-family: sans-serif;
+}
+
+.progress-line {
+  fill: none;
+  stroke-width: 2.5px;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.progress-legend {
+  display: flex;
+  justify-content: center;
+  gap: 1.2rem;
+  margin-top: 0.6rem;
+}
+
+.progress-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.progress-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
 }

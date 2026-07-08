@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sudoku</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'Sudoku/css/level.css' %}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat+Brush&family=Karla:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    {% csrf_token %}
+    <div class="ham">
+        <button id="ham" class="ham"><img id="ham" src="{% static 'Sudoku/images/ham1.png' %}" alt="" srcset=""></button>
+    </div>
+    <div class="sidebar" id="sidebar">
+        <nav>
+            <div class="top">
+                <div class="menu">
+                    <div class="hamburger">
+                        <img id="hamburger" src="{% static 'Sudoku/images/menu.svg' %}" alt="" srcset="">
+                    </div>
+                    <div class="homeicon">
+                        <a href="{% url 'home' %}">
+                            <img id="homeicon" src="{% static 'Sudoku/images/home.svg' %}" alt="" srcset="">
+                        </a>
+                    </div>
+                </div>
+                <div class="Play" id="playbutton" onclick="goToFlow('play')">
+                    <img src="{% static 'Sudoku/images/joy.svg' %}" alt="" srcset="">
+                    <p>Play</p>
+                </div>
+                <div class="Play" id="solverbutton" onclick="goToFlow('solve')">
+                    <img src="{% static 'Sudoku/images/cube.svg' %}" alt="" srcset="">
+                    <p>Solver</p>
+                </div>
+            </div>
+            <div class="buttom">
+                <div class="help">
+                    <img src="{% static 'Sudoku/images/questionmark.svg' %}" alt="">
+                    <p>Help</p>
+                </div>
+            </div>
+        </nav>
+    </div>
+
+    <p class="grid-size-title">Choose a grid size</p>
+    <div class="size-buttons" id="sizeToggle">
+        <div class="size-option selected" data-size="9">
+            <p id="size-9-text">9x9</p>
+        </div>
+        <div class="size-option" data-size="16">
+            <p id="size-16-text">16x16</p>
+        </div>
+    </div>
+
+    <script>
+        const selectedFlow = sessionStorage.getItem('selectedFlow') || 'play';
+        let selectedGridSize = parseInt(sessionStorage.getItem('sudokuGridSize') || '9', 10);
+
+        function goToFlow(flow) {
+            sessionStorage.setItem('selectedFlow', flow);
+            window.location.href = "{% url 'size' %}";
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const sizeToggle = document.getElementById('sizeToggle');
+            if (sizeToggle) {
+                sizeToggle.querySelectorAll('.size-option').forEach(option => {
+                    if (parseInt(option.dataset.size, 10) === selectedGridSize) {
+                        option.classList.add('selected');
+                    }
+
+                    option.addEventListener('click', () => {
+                        selectedGridSize = parseInt(option.dataset.size, 10);
+                        sessionStorage.setItem('sudokuGridSize', selectedGridSize);
+                        sizeToggle.querySelectorAll('.size-option').forEach(item => item.classList.remove('selected'));
+                        option.classList.add('selected');
+
+                        if (selectedFlow === 'solve') {
+                            window.location.href = "{% url 'solver' %}";
+                        } else {
+                            window.location.href = "{% url 'level' %}";
+                        }
+                    });
+                });
+            }
+        });
+    </script>
+</body>
+
+</html>

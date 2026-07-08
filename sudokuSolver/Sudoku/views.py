@@ -13,6 +13,8 @@ from django.contrib.auth import logout
 from django.contrib import messages
 # Create your views here.
 
+SUPPORTED_SIZES = (9, 16)
+
 @csrf_exempt
 
 def index(request):  
@@ -145,13 +147,17 @@ def view_login(request):
 def index_view(request):
     return render(request, 'Sudoku/index.html')
 
+def size_view(request):
+    return render(request, 'Sudoku/size.html')
+
 def level_view(request):
     return render(request, 'Sudoku/level.html')
 
 def grid_view(request):
-    # Get difficulty from session or URL parameter
+    # Get difficulty/grid size from session or URL parameter
     difficulty = request.session.get('difficulty', 'Easy')  # Default to 'Easy' if not set
-    return render(request, 'Sudoku/play.html', {"difficulty" : difficulty})
+    grid_size = request.session.get('grid_size', 9)
+    return render(request, 'Sudoku/play.html', {"difficulty": difficulty, "grid_size": grid_size})
 
 @csrf_exempt
 @require_POST
@@ -159,8 +165,12 @@ def set_difficulty(request):
      try:
         data = json.loads(request.body)  # Parse JSON data from the request
         difficulty = data.get('difficulty')  # Get the difficulty level
+        grid_size = data.get('gridSize', 9)
+        if grid_size not in SUPPORTED_SIZES:
+            return JsonResponse({'success': False, 'error': f'Unsupported grid size: {grid_size}'})
         if difficulty:
             request.session['difficulty'] = difficulty  # Store it in session
+            request.session['grid_size'] = grid_size
             return JsonResponse({'success': True})
         else:
             return JsonResponse({'success': False, 'error': 'No difficulty provided'})
@@ -179,10 +189,13 @@ def sudokuGenerate(request):
         try:
             body = json.loads(request.body)
             clues = body.get('clues', 30)  # Default to 30 if not provided
-            
-            print(f"Generating puzzle with {clues} clues")
-            
-            puzzle, solution = generate_sudoku(clues)
+            size = body.get('size', 9)
+            if size not in SUPPORTED_SIZES:
+                return JsonResponse({'error': f'Unsupported grid size: {size}'}, status=400)
+
+            print(f"Generating {size}x{size} puzzle with {clues} clues")
+
+            puzzle, solution = generate_sudoku(clues, n=size)
             
             print("Generated puzzle structure:")
             for row in puzzle:
@@ -212,51 +225,34 @@ def game_view(request):
         return render(request, 'sudoku_game.html', context)
     return redirect('login')
 
-def save_game_state(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            user_info = UserInfo.objects.get(user=request.user)
-            
-            user_info.current_game_state = data.get('gameBoard')
-            user_info.current_solution = data.get('solutionBoard')
-            user_info.current_score = data.get('score')
-            user_info.current_time = data.get('time')
-            user_info.difficulty_level = data.get('difficulty')
-            user_info.is_game_in_progress = True
-            user_info.is_paused = data.get('isPaused', False)  # Add pause state
-            
-            user_info.save()
-            
-            return JsonResponse({'status': 'success'})
-        except Exception as e:
-            return JsonResponse({'status': 'error', 'message': str(e)})
-    
-    return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
-
-
 @csrf_exempt
 def solve_sudoku(request):
     if request.method == 'POST':
         try:
-            board = [[0 for _ in range(9)] for _ in range(9)]
-            for row in range(9):
-                for col in range(9):
+            size = int(request.POST.get('size', 9))
+            if size not in SUPPORTED_SIZES:
+                return JsonResponse({'solved': False, 'error': f'Unsupported grid size: {size}'})
+
+            board = [[0 for _ in range(size)] for _ in range(size)]
+            for row in range(size):
+                for col in range(size):
                     cell_name = f'cell_{row}_{col}'
                     value = request.POST.get(cell_name, '').strip()
-                    if value and value.isdigit() and 1 <= int(value) <= 9:
+                    if value and value.isdigit() and 1 <= int(value) <= size:
                         board[row][col] = int(value)
             
             # Solve using both methods and compare
-            success, solution, heuristic_time, backtrack_time, dlx_time = solve_with_comparison(board)
-            
+            success, solution, heuristic_time, backtrack_time, dlx_time, backtrack_success, progress = solve_with_comparison(board)
+
             if success:
                 return JsonResponse({
                     'solved': True,
                     'solution': solution,
                     'heuristic_time': round(heuristic_time, 2),
                     'backtrack_time': round(backtrack_time, 2),
-                    'dlx_time': round(dlx_time, 2)  # Include DLX time in the response
+                    'backtrack_solved': backtrack_success,
+                    'dlx_time': round(dlx_time, 2),  # Include DLX time in the response
+                    'progress': progress  # {heuristic, backtrack, dlx}: [(elapsed_ms, cells_filled), ...]
                 })
             else:
                 return JsonResponse({
@@ -281,14 +277,16 @@ def save_game_state(request):
         try:
             data = json.loads(request.body)
             user_info = UserInfo.objects.get(user=request.user)
-            
+
             user_info.current_game_state = data.get('gameBoard')
             user_info.current_solution = data.get('solutionBoard')
             user_info.current_score = data.get('score')
             user_info.current_time = data.get('time')
             user_info.difficulty_level = data.get('difficulty')
+            user_info.grid_size = data.get('gridSize', 9)
             user_info.is_game_in_progress = True
-            
+            user_info.is_paused = data.get('isPaused', False)
+
             user_info.save()
             
             return JsonResponse({'status': 'success'})
@@ -310,7 +308,8 @@ def get_game_state(request):
                     'score': user_info.current_score,
                     'time': user_info.current_time,
                     'difficulty': user_info.difficulty_level,
-                    'isPaused': user_info.is_paused  # Add pause state to response
+                    'isPaused': user_info.is_paused,  # Add pause state to response
+                    'gridSize': user_info.grid_size
                 }
             })
         return JsonResponse({'status': 'no_game'})

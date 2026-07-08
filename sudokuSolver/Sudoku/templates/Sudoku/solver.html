@@ -65,7 +65,7 @@
                     </div>
                 </div>
     
-                <div class="Play" id="playbutton">  
+                <div class="Play" id="playbutton" onclick="navigateToLevel()">  
                     <img src="{% static 'Sudoku/images/joy.svg' %}" alt="" srcset="">  
                     <p>Play</p>  
                 </div>  
@@ -83,7 +83,8 @@
                 }  
 
                 function navigateToLevel() {  
-                    window.location.href = "{% url 'level' %}";  
+                    sessionStorage.setItem('selectedFlow', 'play');
+                    window.location.href = "{% url 'size' %}";  
                 }  
 
             </script>
@@ -217,10 +218,11 @@
             <div class="cell"></div>
             <div class="cell"></div>
             <div class="cell"></div>
-            <div class="cell"></div>
-   
+                <div class="cell"></div>
+    
+        </div>
 
-    <div class="buttons">
+            <div class="buttons">
         <div class="rectangle1"> 
             <p id="one">1</p>
         </div>
@@ -280,15 +282,288 @@
     <p id="Solve">Solve</p>
 </div>
 
-            
+<div id="graphModal" class="graph-modal">
+    <div class="graph-modal-content">
+        <button type="button" class="graph-modal-close" id="graphModalClose" aria-label="Close">&times;</button>
+        <h3 class="graph-modal-title">Solve Time Comparison</h3>
+
+        <div class="chart-view-toggle" id="chartViewToggle">
+            <button type="button" class="chart-view-option selected" data-view="bar">Bar</button>
+            <button type="button" class="chart-view-option" data-view="line">Line</button>
+        </div>
+
+        <div id="barChartView" class="chart-view">
+            <p class="graph-modal-subtitle">Log scale — bars span orders of magnitude (ms)</p>
+            <div class="timing-chart" id="timingChart">
+                <div class="timing-chart-col" data-algo="heuristic">
+                    <div class="timing-chart-value" id="chartValHeuristic">0 ms</div>
+                    <div class="timing-chart-track">
+                        <div class="timing-chart-bar" id="chartBarHeuristic"></div>
+                    </div>
+                    <div class="timing-chart-label">Heuristic</div>
+                </div>
+                <div class="timing-chart-col" data-algo="backtrack">
+                    <div class="timing-chart-value" id="chartValBacktrack">0 ms</div>
+                    <div class="timing-chart-track">
+                        <div class="timing-chart-bar" id="chartBarBacktrack"></div>
+                    </div>
+                    <div class="timing-chart-label">Backtrack</div>
+                </div>
+                <div class="timing-chart-col" data-algo="dlx">
+                    <div class="timing-chart-value" id="chartValDlx">0 ms</div>
+                    <div class="timing-chart-track">
+                        <div class="timing-chart-bar" id="chartBarDlx"></div>
+                    </div>
+                    <div class="timing-chart-label">DLX</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="lineChartView" class="chart-view" style="display:none;">
+            <p class="graph-modal-subtitle">Cells filled over time (log-scale ms) — watch backtracking dip when it undoes a wrong guess</p>
+            <svg id="progressSvg" class="progress-svg" viewBox="0 0 480 260" preserveAspectRatio="xMidYMid meet"></svg>
+            <div class="progress-legend" id="progressLegend">
+                <div class="progress-legend-item"><span class="progress-swatch" style="background:#D97706"></span>Heuristic</div>
+                <div class="progress-legend-item"><span class="progress-swatch" style="background:#B91C1C"></span>Backtrack</div>
+                <div class="progress-legend-item"><span class="progress-swatch" style="background:#0891B2"></span>DLX</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
     <script>
+        const GRID_SIZE = parseInt(sessionStorage.getItem('sudokuGridSize') || '9', 10);
+        const BOX_SIZE = Math.max(1, Math.round(Math.sqrt(GRID_SIZE)));
+        let gameBoard = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+        let originalValues = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+        let cells = null;
+
+        function buildGrid() {
+            const grid = document.querySelector('.sudoku-grid');
+            if (!grid) return;
+
+            grid.innerHTML = '';
+            grid.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 1fr)`;
+            grid.style.gridTemplateRows = `repeat(${GRID_SIZE}, 1fr)`;
+
+            for (let row = 0; row < GRID_SIZE; row++) {
+                for (let col = 0; col < GRID_SIZE; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = String(row);
+                    cell.dataset.col = String(col);
+                    cell.style.borderRight = ((col + 1) % BOX_SIZE === 0 || col === GRID_SIZE - 1) ? '2px solid #888686' : '1px solid #d9d9d9';
+                    cell.style.borderBottom = ((row + 1) % BOX_SIZE === 0 || row === GRID_SIZE - 1) ? '2px solid #888686' : '1px solid #d9d9d9';
+                    grid.appendChild(cell);
+                }
+            }
+
+            cells = document.querySelectorAll('.cell');
+        }
+
+        function buildNumberButtons() {
+            const buttonsContainer = document.querySelector('.buttons');
+            if (!buttonsContainer) return;
+
+            buttonsContainer.innerHTML = '';
+
+            for (let i = 1; i <= GRID_SIZE; i++) {
+                const button = document.createElement('div');
+                button.className = `rectangle${i}`;
+
+                const label = document.createElement('p');
+                label.className = 'number-label';
+                label.textContent = String(i);
+                button.appendChild(label);
+
+                buttonsContainer.appendChild(button);
+            }
+        }
+
+        buildGrid();
+        buildNumberButtons();
+
+        // Solve comparison graphs — values span orders of magnitude (a few ms
+        // up to the ~5s solver timeout), so both views use a log-scale time
+        // axis. "Bar" compares final solve time; "Line" compares cells-filled
+        // progress over time (the naive backtracker's saw-tooth vs DLX/
+        // heuristic's mostly-upward climb).
+        const CHART_MIN_MS = 1;    // floor so log10(0) doesn't break
+        const CHART_MAX_MS = 6000; // a bit above the 5s solver timeout
+        let currentChartView = 'bar';
+
+        function logPct(ms) {
+            const clamped = Math.max(CHART_MIN_MS, ms || CHART_MIN_MS);
+            const logMin = Math.log10(CHART_MIN_MS);
+            const logMax = Math.log10(CHART_MAX_MS);
+            return ((Math.log10(clamped) - logMin) / (logMax - logMin));
+        }
+
+        function renderBarChart() {
+            const timings = window.lastSolveTimings;
+            if (!timings) return;
+
+            const bars = [
+                { value: timings.heuristicTime, barEl: document.getElementById('chartBarHeuristic'), valEl: document.getElementById('chartValHeuristic') },
+                { value: timings.backtrackTime, barEl: document.getElementById('chartBarBacktrack'), valEl: document.getElementById('chartValBacktrack') },
+                { value: timings.dlxTime, barEl: document.getElementById('chartBarDlx'), valEl: document.getElementById('chartValDlx') },
+            ];
+
+            bars.forEach(b => {
+                b.targetPct = Math.max(4, Math.min(100, logPct(b.value) * 100)); // 4% floor keeps tiny bars visible
+                b.valEl.textContent = `${b.value} ms`;
+                b.barEl.style.transitionDelay = '0s';
+                b.barEl.style.height = '0%';
+            });
+
+            // Force layout so the 0% height commits before animating to
+            // target — otherwise the browser can coalesce both writes into
+            // a single frame and skip the animation entirely.
+            void document.getElementById('timingChart').offsetHeight;
+
+            bars.forEach((b, i) => {
+                b.barEl.style.transitionDelay = `${i * 0.15}s`;
+                b.barEl.style.height = `${b.targetPct}%`;
+            });
+        }
+
+        const SVG_NS = 'http://www.w3.org/2000/svg';
+        const PLOT = { left: 36, right: 468, top: 14, bottom: 216 }; // viewBox is 0 0 480 260
+
+        function renderLineChart() {
+            const progressData = window.lastSolveProgress;
+            const svg = document.getElementById('progressSvg');
+            if (!progressData || !svg) return;
+
+            svg.innerHTML = '';
+            const maxFilled = GRID_SIZE * GRID_SIZE;
+            const plotWidth = PLOT.right - PLOT.left;
+            const plotHeight = PLOT.bottom - PLOT.top;
+
+            const xFor = (ms) => PLOT.left + logPct(ms) * plotWidth;
+            const yFor = (filled) => PLOT.bottom - (filled / maxFilled) * plotHeight;
+
+            // Gridlines (hairline, recessive) + axis labels
+            [0, 0.25, 0.5, 0.75, 1].forEach(frac => {
+                const y = PLOT.bottom - frac * plotHeight;
+                const line = document.createElementNS(SVG_NS, 'line');
+                line.setAttribute('x1', PLOT.left);
+                line.setAttribute('x2', PLOT.right);
+                line.setAttribute('y1', y);
+                line.setAttribute('y2', y);
+                line.setAttribute('class', 'progress-gridline');
+                svg.appendChild(line);
+
+                const label = document.createElementNS(SVG_NS, 'text');
+                label.setAttribute('x', PLOT.left - 6);
+                label.setAttribute('y', y + 3);
+                label.setAttribute('class', 'progress-axis-label');
+                label.setAttribute('text-anchor', 'end');
+                label.textContent = Math.round(frac * maxFilled);
+                svg.appendChild(label);
+            });
+
+            [1, 10, 100, 1000].forEach(ms => {
+                if (ms < CHART_MIN_MS || ms > CHART_MAX_MS) return;
+                const x = xFor(ms);
+                const label = document.createElementNS(SVG_NS, 'text');
+                label.setAttribute('x', x);
+                label.setAttribute('y', PLOT.bottom + 16);
+                label.setAttribute('class', 'progress-axis-label');
+                label.setAttribute('text-anchor', 'middle');
+                label.textContent = ms >= 1000 ? `${ms / 1000}s` : `${ms}ms`;
+                svg.appendChild(label);
+            });
+
+            const series = [
+                { key: 'heuristic', color: '#D97706' },
+                { key: 'backtrack', color: '#B91C1C' },
+                { key: 'dlx', color: '#0891B2' },
+            ];
+
+            const paths = [];
+            series.forEach(s => {
+                const points = progressData[s.key] || [];
+                if (points.length < 2) return;
+                const d = points.map(([t, filled], i) =>
+                    `${i === 0 ? 'M' : 'L'} ${xFor(t).toFixed(1)},${yFor(filled).toFixed(1)}`
+                ).join(' ');
+                const path = document.createElementNS(SVG_NS, 'path');
+                path.setAttribute('d', d);
+                path.setAttribute('class', 'progress-line');
+                path.style.stroke = s.color;
+                svg.appendChild(path);
+                paths.push(path);
+            });
+
+            // Draw-in animation: each line "draws itself" left to right,
+            // staggered so the three don't animate on top of each other.
+            paths.forEach((path, i) => {
+                const length = path.getTotalLength();
+                path.style.transition = 'none';
+                path.style.strokeDasharray = length;
+                path.style.strokeDashoffset = length;
+                void path.getBoundingClientRect(); // force layout
+                path.style.transition = `stroke-dashoffset 1s ease-out ${i * 0.2}s`;
+                path.style.strokeDashoffset = 0;
+            });
+        }
+
+        function showTimingChart() {
+            const modal = document.getElementById('graphModal');
+            if (!modal) return;
+            modal.classList.add('open');
+            if (currentChartView === 'bar') {
+                renderBarChart();
+            } else {
+                renderLineChart();
+            }
+        }
+
+        function closeTimingChart() {
+            const modal = document.getElementById('graphModal');
+            if (modal) modal.classList.remove('open');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const graphModalClose = document.getElementById('graphModalClose');
+            if (graphModalClose) {
+                graphModalClose.addEventListener('click', closeTimingChart);
+            }
+            const graphModal = document.getElementById('graphModal');
+            if (graphModal) {
+                graphModal.addEventListener('click', (e) => {
+                    if (e.target === graphModal) closeTimingChart();
+                });
+            }
+
+            const toggle = document.getElementById('chartViewToggle');
+            if (toggle) {
+                toggle.querySelectorAll('.chart-view-option').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        currentChartView = btn.dataset.view;
+                        toggle.querySelectorAll('.chart-view-option').forEach(b => b.classList.remove('selected'));
+                        btn.classList.add('selected');
+                        document.getElementById('barChartView').style.display = currentChartView === 'bar' ? '' : 'none';
+                        document.getElementById('lineChartView').style.display = currentChartView === 'line' ? '' : 'none';
+                        if (currentChartView === 'bar') {
+                            renderBarChart();
+                        } else {
+                            renderLineChart();
+                        }
+                    });
+                });
+            }
+        });
+
         document.addEventListener('DOMContentLoaded', () => {
             let selectedCell = null;
-            let gameBoard = Array(9).fill().map(() => Array(9).fill(0));
             let moveHistory = [];//for undoFunctionality\
             setupButtonListeners();
         // Add a variable to store original input values
-            let originalValues = Array(9).fill().map(() => Array(9).fill(0));
+            gameBoard = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+            originalValues = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
 
             // Initialize the grid
             function initializeGrid() {
@@ -339,8 +614,8 @@
         
             // Handle number input
             function handleNumberInput(cell, number, index) {
-                const row = Math.floor(index / 9);
-                const col = index % 9;
+                const row = Math.floor(index / GRID_SIZE);
+                const col = index % GRID_SIZE;
                 
                 if (isValidMove(row, col, number)) {
                     cell.textContent = number;
@@ -363,8 +638,8 @@
         
             // Clear cell
             function clearCell(cell, index) {
-                const row = Math.floor(index / 9);
-                const col = index % 9;
+                const row = Math.floor(index / GRID_SIZE);
+                const col = index % GRID_SIZE;
                 cell.textContent = '';
                 gameBoard[row][col] = 0;
                 cell.classList.remove('invalid');
@@ -377,10 +652,10 @@
                 
                 switch(key) {
                     case 'ArrowUp':
-                        nextIndex = currentIndex - 9;
+                        nextIndex = currentIndex - GRID_SIZE;
                         break;
                     case 'ArrowDown':
-                        nextIndex = currentIndex + 9;
+                        nextIndex = currentIndex + GRID_SIZE;
                         break;
                     case 'ArrowLeft':
                         nextIndex = currentIndex - 1;
@@ -402,18 +677,18 @@
                 cells.forEach(c => c.classList.remove('highlighted'));
                 
                 const index = [...cell.parentNode.children].indexOf(cell);
-                const row = Math.floor(index / 9);
-                const col = index % 9;
-                const boxStartRow = Math.floor(row / 3) * 3;
-                const boxStartCol = Math.floor(col / 3) * 3;
+                const row = Math.floor(index / GRID_SIZE);
+                const col = index % GRID_SIZE;
+                const boxStartRow = Math.floor(row / BOX_SIZE) * BOX_SIZE;
+                const boxStartCol = Math.floor(col / BOX_SIZE) * BOX_SIZE;
                 
                 cells.forEach((c, i) => {
-                    const currentRow = Math.floor(i / 9);
-                    const currentCol = i % 9;
+                    const currentRow = Math.floor(i / GRID_SIZE);
+                    const currentCol = i % GRID_SIZE;
                     
                     if (currentRow === row || currentCol === col || 
-                        (currentRow >= boxStartRow && currentRow < boxStartRow + 3 &&
-                         currentCol >= boxStartCol && currentCol < boxStartCol + 3)) {
+                        (currentRow >= boxStartRow && currentRow < boxStartRow + BOX_SIZE &&
+                         currentCol >= boxStartCol && currentCol < boxStartCol + BOX_SIZE)) {
                         c.classList.add('highlighted');
                     }
                 });
@@ -422,20 +697,20 @@
             // Check if move is valid
             function isValidMove(row, col, num) {
                 // Check row
-                for (let i = 0; i < 9; i++) {
+                for (let i = 0; i < GRID_SIZE; i++) {
                     if (gameBoard[row][i] === num) return false;
                 }
                 
                 // Check column
-                for (let i = 0; i < 9; i++) {
+                for (let i = 0; i < GRID_SIZE; i++) {
                     if (gameBoard[i][col] === num) return false;
                 }
                 
-                // Check 3x3 box
-                const boxRow = Math.floor(row / 3) * 3;
-                const boxCol = Math.floor(col / 3) * 3;
-                for (let i = 0; i < 3; i++) {
-                    for (let j = 0; j < 3; j++) {
+                // Check sub-box
+                const boxRow = Math.floor(row / BOX_SIZE) * BOX_SIZE;
+                const boxCol = Math.floor(col / BOX_SIZE) * BOX_SIZE;
+                for (let i = 0; i < BOX_SIZE; i++) {
+                    for (let j = 0; j < BOX_SIZE; j++) {
                         if (gameBoard[boxRow + i][boxCol + j] === num) return false;
                     }
                 }
@@ -449,10 +724,11 @@
                 
                 const cells = document.querySelectorAll('.sudoku-grid .cell');
                 const formData = new FormData();
-                
+                formData.append('size', GRID_SIZE);
+
                 // Collect grid data from original values
-                for (let row = 0; row < 9; row++) {
-                    for (let col = 0; col < 9; col++) {
+                for (let row = 0; row < GRID_SIZE; row++) {
+                    for (let col = 0; col < GRID_SIZE; col++) {
                         const value = originalValues[row][col];
                         if (value !== 0) {
                             formData.append(`cell_${row}_${col}`, value);
@@ -483,7 +759,7 @@
     .then(data => {
         if (data.solved) {
             console.log("Sudoku solved successfully:", data.solution);
-            updateGrid(data.solution, data.heuristic_time, data.backtrack_time, data.dlx_time);
+            updateGrid(data.solution, data.heuristic_time, data.backtrack_time, data.dlx_time, data.backtrack_solved, data.progress);
         } else {
             dialogueDiv.innerHTML = `
                 <p>Error: ${data.error}</p>
@@ -505,11 +781,11 @@
 }
         
     // Modify the updateGrid function to include timing display
-    function updateGrid(solution, heuristicTime, backtrackTime, dlxTime) {
+    function updateGrid(solution, heuristicTime, backtrackTime, dlxTime, backtrackSolved, progressData) {
     const cells = document.querySelectorAll('.sudoku-grid .cell');
-    for (let row = 0; row < 9; row++) {
-        for (let col = 0; col < 9; col++) {
-            const index = row * 9 + col;
+    for (let row = 0; row < GRID_SIZE; row++) {
+        for (let col = 0; col < GRID_SIZE; col++) {
+            const index = row * GRID_SIZE + col;
             const value = solution[row][col];
             
             // Only update cells that weren't original inputs
@@ -525,6 +801,21 @@
 
       // Update the dialog div to show timing results
       // Update the dialog div with the new styled timing results
+      // backtracking has no move-ordering heuristic, so on larger grids it
+      // often hits its time limit without finishing — backtrackSolved tells
+      // us whether the shown elapsed time actually reached a solution.
+      const backtrackTimedOut = backtrackSolved === false;
+      const backtrackDisplay = `<span class="time-value">${backtrackTime}</span><span class="time-unit">ms</span>` +
+          (backtrackTimedOut ? '<div class="time-note">(timed out)</div>' : '');
+      const backtrackMobileDisplay = `<span class="mobile-time-value">${backtrackTime}</span><span class="mobile-time-unit">ms</span>` +
+          (backtrackTimedOut ? '<div class="mobile-time-note">(timed out)</div>' : '');
+
+      // Stash the latest timings/progress so the "View Graph" button
+      // (rendered below) can read them without needing them threaded
+      // through as arguments.
+      window.lastSolveTimings = { heuristicTime, backtrackTime, dlxTime };
+      window.lastSolveProgress = progressData || { heuristic: [], backtrack: [], dlx: [] };
+
       const dialogueDiv = document.querySelector('.dialouge .rectangle');
       dialogueDiv.innerHTML = `
           <div class="result-times">
@@ -540,8 +831,7 @@
                   <div class="timing-item">
                       <div class="algorithm-name">Backtrack</div>
                       <div>
-                          <span class="time-value">${backtrackTime}</span>
-                          <span class="time-unit">ms</span>
+                          ${backtrackDisplay}
                       </div>
                   </div>
                   <div class="timing-item">
@@ -551,6 +841,9 @@
                           <span class="time-unit">ms</span>
                       </div>
                   </div>
+                  <div class="timing-item timing-item-graph">
+                      <button type="button" class="view-graph-btn" id="viewGraphBtn">View Graph</button>
+                  </div>
               </div>
           </div>
           <div class="smallrectangle">
@@ -558,12 +851,17 @@
           </div>
       `;
 
+      const viewGraphBtn = document.getElementById('viewGraphBtn');
+      if (viewGraphBtn) {
+          viewGraphBtn.addEventListener('click', () => showTimingChart());
+      }
+
 
     // Update mobile solve button
     const solveMobileDiv = document.querySelector('.solve_mobile');
     solveMobileDiv.classList.add('expanded');
     solveMobileDiv.innerHTML = `
-        
+
         <p id="Solve">Unsolve</p>
         <div class="mobile-result-times">
             <h3 class="mobile-result-header">Solution Analysis</h3>
@@ -578,8 +876,7 @@
                 <div class="mobile-timing-item">
                     <div class="mobile-algorithm-name">Backtracking</div>
                     <div>
-                        <span class="mobile-time-value">${backtrackTime}</span>
-                        <span class="mobile-time-unit">ms</span>
+                        ${backtrackMobileDisplay}
                     </div>
                 </div>
                 <div class="mobile-timing-item">
@@ -589,12 +886,19 @@
                         <span class="mobile-time-unit">ms</span>
                     </div>
                 </div>
+                <div class="mobile-timing-item mobile-timing-item-graph">
+                    <button type="button" class="view-graph-btn" id="viewGraphBtnMobile">View Graph</button>
+                </div>
             </div>
         </div>
-        
+
     `;
-    
-    
+
+    const viewGraphBtnMobile = document.getElementById('viewGraphBtnMobile');
+    if (viewGraphBtnMobile) {
+        viewGraphBtnMobile.addEventListener('click', () => showTimingChart());
+    }
+
     // Update solve button event listener for mobile
     const solveMobileButton = document.getElementById('Solve');
     if (solveMobileButton) {
@@ -635,8 +939,8 @@
 function removeSolvedValues() {
     const cells = document.querySelectorAll('.sudoku-grid .cell');
     cells.forEach((cell, index) => {
-        const row = Math.floor(index / 9);
-        const col = index % 9;
+        const row = Math.floor(index / GRID_SIZE);
+        const col = index % GRID_SIZE;
         
         // Only clear cells that weren't original inputs
         if (originalValues[row][col] === 0) {
@@ -655,8 +959,8 @@ function clearSolverGrid() {
     });
     
     // Reset all tracking arrays
-    gameBoard = Array(9).fill().map(() => Array(9).fill(0));
-    originalValues = Array(9).fill().map(() => Array(9).fill(0));
+    gameBoard = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+    originalValues = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
     
     if (selectedCell) {
         selectedCell.classList.remove('selected');
@@ -679,11 +983,11 @@ function clearSolverGrid() {
     // Setup event listeners for buttons
     function setupButtonListeners() {
         // Number buttons
-        const numberButtons = document.querySelectorAll('.rectangle1, .rectangle2, .rectangle3, .rectangle4, .rectangle5, .rectangle6, .rectangle7, .rectangle8, .rectangle9');
+        const numberButtons = document.querySelectorAll('.buttons [class^="rectangle"]');
         numberButtons.forEach(button => {
             button.addEventListener('click', () => {
                 if (selectedCell) {
-                    const number = parseInt(button.querySelector('p').textContent);
+                    const number = parseInt(button.querySelector('p').textContent, 10);
                     const cellIndex = Array.from(document.querySelectorAll('.cell')).indexOf(selectedCell);
                     handleNumberInput(selectedCell, number, cellIndex);
                 }

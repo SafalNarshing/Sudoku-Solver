@@ -13,11 +13,22 @@ class UserInfo(models.Model):
     current_score = models.IntegerField(default=0)               
     current_time = models.IntegerField(default=0)                
     difficulty_level = models.CharField(max_length=20, default='beginner')
+    grid_size = models.IntegerField(default=9)  # Size of the in-progress saved game (9 or 16)
     is_game_in_progress = models.BooleanField(default=False)
     is_paused = models.BooleanField(default=False)  # Add this field
 
 
-@receiver(post_save, sender=User)  
+class HighScore(models.Model):
+    user_info = models.ForeignKey(UserInfo, on_delete=models.CASCADE, related_name='high_scores')
+    grid_size = models.IntegerField()
+    best_score = models.IntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user_info', 'grid_size')
+
+
+@receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):  
     if created:  
         UserInfo.objects.create(user=instance, username=instance.username)  
