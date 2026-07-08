@@ -34,6 +34,9 @@ def solve_with_comparison(board):
     # Final solution — prefer heuristic, fall back to DLX result
     final_solution = heuristic_solution if heuristic_success else (dlx_result if dlx_success else board_backtrack)
 
-    overall_success = heuristic_success and backtrack_success and dlx_success
+    # backtrack_success is informational only (benchmarking comparison) — the
+    # naive solver has no move-ordering heuristic and is time-boxed, so it can
+    # legitimately time out on a solvable board without that being a failure.
+    overall_success = heuristic_success or dlx_success
 
     return overall_success, final_solution, heuristic_time, backtrack_time, dlx_time  # ← now returns 5 values
