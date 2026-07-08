@@ -13,10 +13,12 @@ This project aims to serve as a learning tool to help users understand and analy
 3. [Usage/Examples](#usageexamples) 
 4. [Algorithms](#algorithms)
 4. [Dependencies](#dependencies)  
-5. [Troubleshooting](#troubleshooting)  
-6. [Supported Operatorions](#supported-operations)  
-7. [Contributors](#contributors)  
-8. [To-Do List](#to-do-list)  
+5. [Installation](#installation)
+6. [Database Schema](#database-schema)
+7. [Troubleshooting](#troubleshooting)  
+8. [Supported Operatorions](#supported-operations)  
+9. [Contributors](#contributors)  
+10. [To-Do List](#to-do-list)  
 
 
 ## Screenshots
@@ -133,7 +135,24 @@ git clone https://github.com/SafalNarsingh/Sudoku-Solver
 pip install -r requirements.txt
 ```
 
-3. Locate the the root directory and run the following command:
+3. Create a `.env` file in the project root (same folder as `manage.py`) with the following variables:
+```s
+SECRET_KEY=your-django-secret-key
+
+DB_NAME=your-database-name
+DB_USER=your-database-user
+DB_PASSWORD=your-database-password
+DB_HOST=your-database-host
+DB_PORT=your-database-port
+```
+The app connects to a PostgreSQL database (this project uses [Supabase](https://supabase.com/) for hosting), so `DB_HOST`/`DB_PORT`/etc. should point at a running Postgres instance. `SECRET_KEY` is Django's secret key, used for cryptographic signing — generate your own rather than reusing one from another environment.
+
+4. Apply database migrations:
+```s
+py manage.py migrate
+```
+
+5. Locate the the root directory and run the following command:
 ```s
 py manage.py runserver
 ```
@@ -143,6 +162,40 @@ Your server should be hosted locally within the given address. Open and enjoy.
 Alternatively, 
 You can run the web app using the following link:
 https://solversudoku.vercel.app/
+
+
+## Database Schema
+
+Step 4 above (`py manage.py migrate`) is what actually creates the database tables — Django reads the schema from `Sudoku/models.py` and applies the migration files, so no manual SQL is needed against the Postgres instance in your `.env`. This also creates Django's own built-in tables (`auth_user`, `django_session`, `django_admin_log`, etc.) alongside the two app-specific tables below.
+
+### `UserInfo` — one-to-one with Django's built-in `User` model
+Created automatically whenever a `User` signs up (via a `post_save` signal), so it never needs to be created by hand.
+
+| Field | Type | Notes |
+|---|---|---|
+| `user` | OneToOneField → `User` | `on_delete=CASCADE` |
+| `username` | CharField(150) | |
+| `high_score` | IntegerField | default `0` |
+| `current_game_state` | JSONField | nullable — the in-progress board |
+| `current_solution` | JSONField | nullable — the in-progress solution |
+| `current_score` | IntegerField | default `0` |
+| `current_time` | IntegerField | default `0` — elapsed seconds |
+| `difficulty_level` | CharField(20) | default `'beginner'` |
+| `grid_size` | IntegerField | default `9` — size (9 or 16) of the in-progress saved game |
+| `is_game_in_progress` | BooleanField | default `False` |
+| `is_paused` | BooleanField | default `False` |
+
+### `HighScore` — many-to-one with `UserInfo`
+Tracks each user's best score per grid size, so 9x9 and 16x16 scores don't overwrite one another.
+
+| Field | Type | Notes |
+|---|---|---|
+| `user_info` | ForeignKey → `UserInfo` | `on_delete=CASCADE`, `related_name='high_scores'` |
+| `grid_size` | IntegerField | |
+| `best_score` | IntegerField | default `0` |
+| `updated_at` | DateTimeField | auto-updated on save |
+
+`(user_info, grid_size)` has a unique constraint — at most one `HighScore` row per user per grid size.
 
 
 ## Troubleshooting
