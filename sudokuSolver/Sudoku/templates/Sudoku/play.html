@@ -205,6 +205,54 @@
         </div>
     </div>
 </div>
+<div id="graphModal" class="graph-modal">
+    <div class="graph-modal-content">
+        <button type="button" class="graph-modal-close" id="graphModalClose" aria-label="Close">&times;</button>
+        <h3 class="graph-modal-title">Solve Time Comparison</h3>
+
+        <div class="chart-view-toggle" id="chartViewToggle">
+            <button type="button" class="chart-view-option selected" data-view="bar">Bar</button>
+            <button type="button" class="chart-view-option" data-view="line">Line</button>
+        </div>
+
+        <div id="barChartView" class="chart-view">
+            <p class="graph-modal-subtitle">Log scale — bars span orders of magnitude (ms)</p>
+            <div class="timing-chart" id="timingChart">
+                <div class="timing-chart-col" data-algo="heuristic">
+                    <div class="timing-chart-value" id="chartValHeuristic">0 ms</div>
+                    <div class="timing-chart-track">
+                        <div class="timing-chart-bar" id="chartBarHeuristic"></div>
+                    </div>
+                    <div class="timing-chart-label">Heuristic</div>
+                </div>
+                <div class="timing-chart-col" data-algo="backtrack">
+                    <div class="timing-chart-value" id="chartValBacktrack">0 ms</div>
+                    <div class="timing-chart-track">
+                        <div class="timing-chart-bar" id="chartBarBacktrack"></div>
+                    </div>
+                    <div class="timing-chart-label">Backtrack</div>
+                </div>
+                <div class="timing-chart-col" data-algo="dlx">
+                    <div class="timing-chart-value" id="chartValDlx">0 ms</div>
+                    <div class="timing-chart-track">
+                        <div class="timing-chart-bar" id="chartBarDlx"></div>
+                    </div>
+                    <div class="timing-chart-label">DLX</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="lineChartView" class="chart-view" style="display:none;">
+            <p class="graph-modal-subtitle">Cells filled over time (log-scale ms) — watch backtracking dip when it undoes a wrong guess</p>
+            <svg id="progressSvg" class="progress-svg" viewBox="0 0 480 260" preserveAspectRatio="xMidYMid meet"></svg>
+            <div class="progress-legend" id="progressLegend">
+                <div class="progress-legend-item"><span class="progress-swatch" style="background:#D97706"></span>Heuristic</div>
+                <div class="progress-legend-item"><span class="progress-swatch" style="background:#B91C1C"></span>Backtrack</div>
+                <div class="progress-legend-item"><span class="progress-swatch" style="background:#0891B2"></span>DLX</div>
+            </div>
+        </div>
+    </div>
+</div>
 <div class="buttons">
 <div class="rectangle1"> 
     <p id="one">1</p>
@@ -262,6 +310,7 @@
         <button id="pause-btn" class="btn btn-warning">
             Pause
         </button>
+        <div id="solveOverlay" class="solve-overlay"></div>
         <div class="smallrectangle">
             <p id="solve">Solve</p>
         </div>
@@ -512,6 +561,8 @@ function renderSavedBoard(board) {
         if (notesBtn) {
             notesBtn.addEventListener('click', handleNotes);
         }
+
+        initializeSolveButton();
     }
 // Function to toggle pencil mode
 function togglePencilMode() {
@@ -610,6 +661,373 @@ function togglePencilMode() {
     function handleNotes() {
         // Implement notes functionality if needed
         console.log('Notes functionality not implemented yet');
+    }
+
+    // ---- Solve / Unsolve ----
+    let preSolveSnapshot = null;
+    let isSolved = false;
+
+    function snapshotBoardState() {
+        return [...cells].map((cell, index) => ({
+            text: cell.textContent,
+            value: gameBoard[Math.floor(index / GRID_SIZE)][index % GRID_SIZE],
+            correct: cell.classList.contains('correct-number'),
+            wrong: cell.classList.contains('wrong-entry'),
+            conflict: cell.classList.contains('conflict-highlight')
+        }));
+    }
+
+    function restoreBoardState(snapshot) {
+        cells.forEach((cell, index) => {
+            if (cell.classList.contains('pre-filled')) return;
+
+            const row = Math.floor(index / GRID_SIZE);
+            const col = index % GRID_SIZE;
+            const saved = snapshot[index];
+
+            cell.textContent = saved.text;
+            cell.classList.remove('correct-number', 'wrong-entry', 'conflict-highlight', 'solved-number');
+            if (saved.correct) cell.classList.add('correct-number');
+            if (saved.wrong) cell.classList.add('wrong-entry');
+            if (saved.conflict) cell.classList.add('conflict-highlight');
+            gameBoard[row][col] = saved.value;
+        });
+
+        numberUsage.fill(0);
+        cells.forEach(cell => {
+            const num = parseInt(cell.textContent);
+            if (!isNaN(num) && num > 0) numberUsage[num]++;
+        });
+        updateNumberButtons();
+    }
+
+    function setGridInteractive(enabled) {
+        cells.forEach(cell => {
+            if (!cell.classList.contains('pre-filled')) {
+                cell.style.pointerEvents = enabled ? 'auto' : 'none';
+            }
+        });
+        document.querySelectorAll('.buttons [class^="rectangle"]').forEach(btn => {
+            btn.style.pointerEvents = enabled ? 'auto' : 'none';
+        });
+    }
+
+    function showSolveOverlay(html) {
+        const overlay = document.getElementById('solveOverlay');
+        if (!overlay) return;
+        overlay.innerHTML = html;
+        overlay.classList.add('active');
+    }
+
+    function hideSolveOverlay() {
+        const overlay = document.getElementById('solveOverlay');
+        if (overlay) overlay.classList.remove('active');
+    }
+
+    function renderAlgorithmTimings(data) {
+        window.lastSolveTimings = {
+            heuristicTime: data.heuristic_time,
+            backtrackTime: data.backtrack_time,
+            dlxTime: data.dlx_time
+        };
+        window.lastSolveProgress = data.progress || { heuristic: [], backtrack: [], dlx: [] };
+
+        const backtrackTimedOut = data.backtrack_solved === false;
+        const backtrackDisplay = `<span class="time-value">${data.backtrack_time}</span><span class="time-unit">ms</span>` +
+            (backtrackTimedOut ? '<div class="time-note">(timed out)</div>' : '');
+
+        showSolveOverlay(`
+            <div class="result-times">
+                <h3 class="result-header">Solution Analysis</h3>
+                <div class="timing-grid">
+                    <div class="timing-item">
+                        <div class="algorithm-name">Heuristic</div>
+                        <div>
+                            <span class="time-value">${data.heuristic_time}</span>
+                            <span class="time-unit">ms</span>
+                        </div>
+                    </div>
+                    <div class="timing-item">
+                        <div class="algorithm-name">Backtrack</div>
+                        <div>${backtrackDisplay}</div>
+                    </div>
+                    <div class="timing-item">
+                        <div class="algorithm-name">DLX</div>
+                        <div>
+                            <span class="time-value">${data.dlx_time}</span>
+                            <span class="time-unit">ms</span>
+                        </div>
+                    </div>
+                    <div class="timing-item timing-item-graph">
+                        <button type="button" class="view-graph-btn" id="viewGraphBtn">View Graph</button>
+                    </div>
+                </div>
+            </div>
+        `);
+
+        const viewGraphBtn = document.getElementById('viewGraphBtn');
+        if (viewGraphBtn) {
+            viewGraphBtn.addEventListener('click', () => showTimingChart());
+        }
+    }
+
+    function fetchAlgorithmTimings() {
+        const puzzleData = sessionStorage.getItem('sudokuPuzzle');
+        if (!puzzleData) return;
+        const puzzle = JSON.parse(puzzleData);
+
+        const formData = new FormData();
+        formData.append('size', GRID_SIZE);
+        for (let row = 0; row < GRID_SIZE; row++) {
+            for (let col = 0; col < GRID_SIZE; col++) {
+                const value = puzzle[row][col];
+                if (value) formData.append(`cell_${row}_${col}`, value);
+            }
+        }
+
+        fetch('/solve-sudoku/', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': getCookie('csrftoken') }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (!isSolved) return; // user already pressed Unsolve before this returned
+            if (data.solved) {
+                renderAlgorithmTimings(data);
+            } else {
+                showSolveOverlay('<p class="solve-overlay-status">Could not compute timings</p>');
+            }
+        })
+        .catch(() => {
+            if (isSolved) showSolveOverlay('<p class="solve-overlay-status">Could not compute timings</p>');
+        });
+    }
+
+    function solvePuzzle() {
+        if (!solutionBoard || isSolved) return;
+
+        preSolveSnapshot = snapshotBoardState();
+
+        cells.forEach((cell, index) => {
+            if (cell.classList.contains('pre-filled')) return;
+
+            const row = Math.floor(index / GRID_SIZE);
+            const col = index % GRID_SIZE;
+            const value = solutionBoard[row][col];
+
+            cell.textContent = value;
+            cell.classList.remove('wrong-entry', 'conflict-highlight');
+            cell.classList.add('correct-number', 'solved-number');
+            gameBoard[row][col] = value;
+        });
+
+        numberUsage.fill(0);
+        cells.forEach(cell => {
+            const num = parseInt(cell.textContent);
+            if (!isNaN(num) && num > 0) numberUsage[num]++;
+        });
+        updateNumberButtons();
+
+        setGridInteractive(false);
+        isSolved = true;
+
+        const solveLabel = document.getElementById('solve');
+        if (solveLabel) solveLabel.textContent = 'Unsolve';
+
+        showSolveOverlay('<p class="solve-overlay-status">Solving…</p>');
+        fetchAlgorithmTimings();
+    }
+
+    function unsolvePuzzle() {
+        if (!preSolveSnapshot) return;
+
+        restoreBoardState(preSolveSnapshot);
+        preSolveSnapshot = null;
+        isSolved = false;
+
+        setGridInteractive(true);
+
+        const solveLabel = document.getElementById('solve');
+        if (solveLabel) solveLabel.textContent = 'Solve';
+
+        hideSolveOverlay();
+        closeTimingChart();
+    }
+
+    function initializeSolveButton() {
+        const solveButton = document.querySelector('.smallrectangle');
+        if (!solveButton) return;
+        solveButton.addEventListener('click', () => {
+            if (isSolved) {
+                unsolvePuzzle();
+            } else {
+                solvePuzzle();
+            }
+        });
+    }
+
+    // ---- Solve time comparison graph (bar / line views, same as the solver page) ----
+    const CHART_MIN_MS = 1;    // floor so log10(0) doesn't break
+    const CHART_MAX_MS = 6000; // a bit above the 5s solver timeout
+    let currentChartView = 'bar';
+
+    function logPct(ms) {
+        const clamped = Math.max(CHART_MIN_MS, ms || CHART_MIN_MS);
+        const logMin = Math.log10(CHART_MIN_MS);
+        const logMax = Math.log10(CHART_MAX_MS);
+        return ((Math.log10(clamped) - logMin) / (logMax - logMin));
+    }
+
+    function renderBarChart() {
+        const timings = window.lastSolveTimings;
+        if (!timings) return;
+
+        const bars = [
+            { value: timings.heuristicTime, barEl: document.getElementById('chartBarHeuristic'), valEl: document.getElementById('chartValHeuristic') },
+            { value: timings.backtrackTime, barEl: document.getElementById('chartBarBacktrack'), valEl: document.getElementById('chartValBacktrack') },
+            { value: timings.dlxTime, barEl: document.getElementById('chartBarDlx'), valEl: document.getElementById('chartValDlx') },
+        ];
+
+        bars.forEach(b => {
+            b.targetPct = Math.max(4, Math.min(100, logPct(b.value) * 100));
+            b.valEl.textContent = `${b.value} ms`;
+            b.barEl.style.transitionDelay = '0s';
+            b.barEl.style.height = '0%';
+        });
+
+        void document.getElementById('timingChart').offsetHeight;
+
+        bars.forEach((b, i) => {
+            b.barEl.style.transitionDelay = `${i * 0.15}s`;
+            b.barEl.style.height = `${b.targetPct}%`;
+        });
+    }
+
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const PLOT = { left: 36, right: 468, top: 14, bottom: 216 }; // viewBox is 0 0 480 260
+
+    function renderLineChart() {
+        const progressData = window.lastSolveProgress;
+        const svg = document.getElementById('progressSvg');
+        if (!progressData || !svg) return;
+
+        svg.innerHTML = '';
+        const maxFilled = GRID_SIZE * GRID_SIZE;
+        const plotWidth = PLOT.right - PLOT.left;
+        const plotHeight = PLOT.bottom - PLOT.top;
+
+        const xFor = (ms) => PLOT.left + logPct(ms) * plotWidth;
+        const yFor = (filled) => PLOT.bottom - (filled / maxFilled) * plotHeight;
+
+        [0, 0.25, 0.5, 0.75, 1].forEach(frac => {
+            const y = PLOT.bottom - frac * plotHeight;
+            const line = document.createElementNS(SVG_NS, 'line');
+            line.setAttribute('x1', PLOT.left);
+            line.setAttribute('x2', PLOT.right);
+            line.setAttribute('y1', y);
+            line.setAttribute('y2', y);
+            line.setAttribute('class', 'progress-gridline');
+            svg.appendChild(line);
+
+            const label = document.createElementNS(SVG_NS, 'text');
+            label.setAttribute('x', PLOT.left - 6);
+            label.setAttribute('y', y + 3);
+            label.setAttribute('class', 'progress-axis-label');
+            label.setAttribute('text-anchor', 'end');
+            label.textContent = Math.round(frac * maxFilled);
+            svg.appendChild(label);
+        });
+
+        [1, 10, 100, 1000].forEach(ms => {
+            if (ms < CHART_MIN_MS || ms > CHART_MAX_MS) return;
+            const x = xFor(ms);
+            const label = document.createElementNS(SVG_NS, 'text');
+            label.setAttribute('x', x);
+            label.setAttribute('y', PLOT.bottom + 16);
+            label.setAttribute('class', 'progress-axis-label');
+            label.setAttribute('text-anchor', 'middle');
+            label.textContent = ms >= 1000 ? `${ms / 1000}s` : `${ms}ms`;
+            svg.appendChild(label);
+        });
+
+        const series = [
+            { key: 'heuristic', color: '#D97706' },
+            { key: 'backtrack', color: '#B91C1C' },
+            { key: 'dlx', color: '#0891B2' },
+        ];
+
+        const paths = [];
+        series.forEach(s => {
+            const points = progressData[s.key] || [];
+            if (points.length < 2) return;
+            const d = points.map(([t, filled], i) =>
+                `${i === 0 ? 'M' : 'L'} ${xFor(t).toFixed(1)},${yFor(filled).toFixed(1)}`
+            ).join(' ');
+            const path = document.createElementNS(SVG_NS, 'path');
+            path.setAttribute('d', d);
+            path.setAttribute('class', 'progress-line');
+            path.style.stroke = s.color;
+            svg.appendChild(path);
+            paths.push(path);
+        });
+
+        paths.forEach((path, i) => {
+            const length = path.getTotalLength();
+            path.style.transition = 'none';
+            path.style.strokeDasharray = length;
+            path.style.strokeDashoffset = length;
+            void path.getBoundingClientRect();
+            path.style.transition = `stroke-dashoffset 1s ease-out ${i * 0.2}s`;
+            path.style.strokeDashoffset = 0;
+        });
+    }
+
+    function showTimingChart() {
+        const modal = document.getElementById('graphModal');
+        if (!modal) return;
+        modal.classList.add('open');
+        if (currentChartView === 'bar') {
+            renderBarChart();
+        } else {
+            renderLineChart();
+        }
+    }
+
+    function closeTimingChart() {
+        const modal = document.getElementById('graphModal');
+        if (modal) modal.classList.remove('open');
+    }
+
+    function initializeGraphModal() {
+        const graphModalClose = document.getElementById('graphModalClose');
+        if (graphModalClose) {
+            graphModalClose.addEventListener('click', closeTimingChart);
+        }
+        const graphModal = document.getElementById('graphModal');
+        if (graphModal) {
+            graphModal.addEventListener('click', (e) => {
+                if (e.target === graphModal) closeTimingChart();
+            });
+        }
+
+        const toggle = document.getElementById('chartViewToggle');
+        if (toggle) {
+            toggle.querySelectorAll('.chart-view-option').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    currentChartView = btn.dataset.view;
+                    toggle.querySelectorAll('.chart-view-option').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                    document.getElementById('barChartView').style.display = currentChartView === 'bar' ? '' : 'none';
+                    document.getElementById('lineChartView').style.display = currentChartView === 'line' ? '' : 'none';
+                    if (currentChartView === 'bar') {
+                        renderBarChart();
+                    } else {
+                        renderLineChart();
+                    }
+                });
+            });
+        }
     }
 
     function initializeGrid() {
@@ -1016,7 +1434,8 @@ if (window.location.pathname.includes('/play')) {
     initializeGrid();
     initializeNumberButtons();
     initializeGameControls();
-    
+    initializeGraphModal();
+
     // Add mistake counter container to the DOM immediately after difficulty banner
     const difficultyBanner = document.querySelector('.difficulty-banner');
     let mistakeCounter = document.createElement('div');

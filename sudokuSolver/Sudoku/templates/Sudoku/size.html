@@ -67,6 +67,20 @@
             window.location.href = "{% url 'size' %}";
         }
 
+        const hamburger = document.getElementById('ham');
+        const sidebar = document.getElementById('sidebar');
+
+        hamburger.addEventListener('click', () => {
+            sidebar.classList.toggle('active');
+        });
+
+        document.addEventListener('click', (event) => {
+            const isClickInside = sidebar.contains(event.target) || hamburger.contains(event.target);
+            if (!isClickInside) {
+                sidebar.classList.remove('active');
+            }
+        });
+
         document.addEventListener('DOMContentLoaded', () => {
             const sizeToggle = document.getElementById('sizeToggle');
             if (sizeToggle) {
