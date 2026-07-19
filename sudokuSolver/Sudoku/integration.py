@@ -13,6 +13,12 @@ def solve_sudoku(board, n=None, progress=None):
     # dense 729x324 matrix — and used to run before the timer started,
     # making DLX look far faster on the chart than the reported total time).
     recorder = ProgressRecorder() if progress is not None else None
+    if recorder:
+        # Anchor the series at (~0ms, given-count) so the chart traces a
+        # continuous path through matrix/grid construction instead of
+        # jumping straight to the first post-setup sample.
+        given_count = sum(1 for row in board for v in row if v != 0)
+        recorder.record(given_count, force=True)
 
     # Step 1: Build exact cover matrix
     matrix = build_exact_cover_matrix(n)
