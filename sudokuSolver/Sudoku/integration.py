@@ -1,11 +1,18 @@
 from .exact_cover_matrix import build_exact_cover_matrix, get_forced_rows, decode_row_index
 from .dlx_node import build_dlx_grid
 from .dlx_solver import DLXSolver
-from .sudoku_utils import empty_board
+from .sudoku_utils import empty_board, ProgressRecorder
 
 
 def solve_sudoku(board, n=None, progress=None):
     n = n or len(board)
+
+    # Start the progress clock before any setup work, so the recorded
+    # timeline matches the wall-clock time callers measure around this whole
+    # function (matrix/grid construction is not free — for n=9 it builds a
+    # dense 729x324 matrix — and used to run before the timer started,
+    # making DLX look far faster on the chart than the reported total time).
+    recorder = ProgressRecorder() if progress is not None else None
 
     # Step 1: Build exact cover matrix
     matrix = build_exact_cover_matrix(n)
@@ -15,7 +22,7 @@ def solve_sudoku(board, n=None, progress=None):
     root, column_nodes = build_dlx_grid(matrix)
 
     # Step 3: Create solver FIRST
-    solver = DLXSolver(root, progress=progress)
+    solver = DLXSolver(root, progress=progress, recorder=recorder)
 
     # Step 4: Pre-cover forced rows (given digits)
     for row_idx in forced_rows:

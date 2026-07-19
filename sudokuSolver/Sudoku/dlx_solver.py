@@ -3,7 +3,7 @@ from .sudoku_utils import ProgressRecorder
 
 
 class DLXSolver:
-    def __init__(self, root: ColumnNode, progress: list = None):
+    def __init__(self, root: ColumnNode, progress: list = None, recorder: ProgressRecorder = None):
         """
         Initialize the DLX solver with the root header node of the Dancing Links structure.
 
@@ -11,11 +11,17 @@ class DLXSolver:
         cells_filled) snapshots as rows are added to/removed from the
         solution — each row corresponds to placing one digit in one cell,
         so len(self.solution) doubles as the cells-filled count.
+
+        `recorder` lets a caller supply a `ProgressRecorder` whose clock
+        already started before this solver was constructed (e.g. before
+        building the exact-cover matrix), so the recorded timeline reflects
+        total elapsed time rather than just the search phase. Falls back to
+        starting a fresh one here if omitted.
         """
         self.root = root
         self.solution = []  # Stores the solution rows
         self._progress = progress
-        self._recorder = ProgressRecorder() if progress is not None else None
+        self._recorder = recorder if recorder is not None else (ProgressRecorder() if progress is not None else None)
 
     def record_progress(self, force=False):
         if self._recorder:
